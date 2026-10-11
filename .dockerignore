@@ -1,0 +1,62 @@
+# Git
+.git/
+.gitignore
+.gitattributes
+.github/
+
+# Python caches / build artifacts
+__pycache__/
+*.py[cod]
+*.so
+build/
+dist/
+wheels/
+*.egg-info/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+.uv/
+
+# Python tooling caches
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.tox/
+.nox/
+.hypothesis/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.cache/
+
+# Local environment / secrets
+.env
+.env.*
+!.env.example
+
+# Local Docker / service data
+data/
+logs/
+*.log
+
+# Spec Kit local state
+.specify/
+
+# IDE / editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docs / misc not needed in image
+Makefile
+compose.yml

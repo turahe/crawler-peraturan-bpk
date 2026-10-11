@@ -1,0 +1,74 @@
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+      POSTGRES_DB: ${POSTGRES_DB:-mydb}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - ./data/postgres:/var/lib/postgresql
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  rustfs:
+    image: rustfs/rustfs:latest
+    container_name: rustfs
+    user: "0:0"
+    restart: unless-stopped
+    environment:
+      RUSTFS_ROOT_USER: ${RUSTFS_ACCESS_KEY:-admin}
+      RUSTFS_ROOT_PASSWORD: ${RUSTFS_SECRET_KEY:-password}
+      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY:-admin}
+      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY:-password}
+      RUSTFS_BUCKET: ${RUSTFS_BUCKET:-documents}
+      RUSTFS_ADDRESS: ":9000"
+      RUSTFS_CONSOLE_ADDRESS: ":9001"
+      RUSTFS_CONSOLE_ENABLE: "true"
+    command:
+      - server
+      - --address
+      - ":9000"
+      - --console-enable
+      - --console-address
+      - ":9001"
+      - /data
+    ports:
+      - "8080:9000"
+      - "9001:9001"
+    volumes:
+      - ./data/rustfs:/data
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    user: "0:0"
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./data/pdf:/app/data/pdf
+    environment:
+      RUSTFS_ENDPOINT: http://rustfs:9000
+      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY:-admin}
+      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY:-password}
+      RUSTFS_BUCKET: ${RUSTFS_BUCKET:-documents}
+      RUSTFS_PREFIX: ${RUSTFS_PREFIX:-pdf}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-mydb}
+      POSTGRES_USER: ${POSTGRES_USER:-user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rustfs:
+        condition: service_started

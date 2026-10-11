@@ -1,0 +1,28 @@
+[project]
+name = "playright-peraturan-bpk"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Nur Wachid", email = "wachid@outlook.com" }
+]
+requires-python = ">=3.14"
+dependencies = [
+    "alembic>=1.20.0",
+    "beautifulsoup4>=4.15.0",
+    "boto3>=1.40.0",
+    "python-dotenv>=1.0.1",
+    "requests>=2.32.3",
+    "sqlalchemy>=2.0.0",
+    "psycopg[binary]>=3.2.0",
+]
+
+[project.scripts]
+playright-peraturan-bpk = "playright_peraturan_bpk:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[build-system]
+requires = ["uv_build>=0.12.19,<0.13.0"]
+build-backend = "uv_build"
