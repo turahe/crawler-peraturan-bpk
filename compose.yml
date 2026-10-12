@@ -69,7 +69,7 @@ services:
       context: .
       dockerfile: Dockerfile
     user: "0:0"
-    restart: unless-stopped
+    restart: on-failure
     env_file:
       - .env
     volumes:

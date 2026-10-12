@@ -1,3 +1,4 @@
+[Project documentation](docs/README.md) covers setup, architecture, crawler workflow, data model, operations, and development.
 
 ```mermaid
 
