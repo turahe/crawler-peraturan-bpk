@@ -1,4 +1,22 @@
 services:
+  rabbitmq:
+    image: rabbitmq:4-management
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-crawler}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-crawler-password}
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - ./data/rabbitmq:/var/lib/rabbitmq
+      - ./docker/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
   postgres:
     image: postgres:18
     environment:
@@ -75,6 +93,8 @@ services:
     volumes:
       - ./data/pdf:/app/data/pdf
     environment:
+      CRAWLER_MODE: producer
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-crawler}:${RABBITMQ_PASSWORD:-crawler-password}@rabbitmq:5672/%2F
       RUSTFS_ENDPOINT: http://rustfs:9000
       RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY:-admin}
       RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY:-password}
@@ -90,3 +110,42 @@ services:
         condition: service_completed_successfully
       rustfs:
         condition: service_started
+      rabbitmq:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    user: "0:0"
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./data/pdf:/app/data/pdf
+    environment:
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-crawler}:${RABBITMQ_PASSWORD:-crawler-password}@rabbitmq:5672/%2F
+      RUSTFS_ENDPOINT: http://rustfs:9000
+      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY:-admin}
+      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY:-password}
+      RUSTFS_BUCKET: ${RUSTFS_BUCKET:-documents}
+      RUSTFS_PREFIX: ${RUSTFS_PREFIX:-pdf}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-mydb}
+      POSTGRES_USER: ${POSTGRES_USER:-user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+    command:
+      - celery
+      - -A
+      - playright_peraturan_bpk.celery_app:app
+      - worker
+      - --loglevel=INFO
+      - --concurrency=${CELERY_CONCURRENCY:-2}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      rustfs:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy

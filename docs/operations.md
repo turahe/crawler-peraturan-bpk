@@ -28,6 +28,13 @@ Create a new revision with Alembic's normal revision workflow, inspect the gener
 | `RUSTFS_BUCKET` | `documents` | Bucket used for object uploads |
 | `RUSTFS_PREFIX` | `pdf` | Prefix for uploaded PDF object keys |
 | `CRAWLER_REQUEST_DELAY_SECONDS` | `0.5` | Minimum interval between HTTP requests |
+| `CRAWLER_THREADS` | `4` | Maximum concurrent regulation processors in inline mode |
+| `CRAWLER_MODE` | `producer` in Compose; `inline` locally | `producer` dispatches Celery tasks; `inline` runs both stages in one process |
+| `RABBITMQ_URL` | `amqp://crawler:crawler-password@localhost:5672/%2F` | RabbitMQ AMQP connection URL |
+| `RABBITMQ_QUEUE` | `regulation_crawl` | Durable queue for regulation IDs |
+| `RABBITMQ_USER` | `crawler` in Compose | RabbitMQ application user |
+| `RABBITMQ_PASSWORD` | `crawler-password` in Compose | RabbitMQ application password |
+| `CELERY_CONCURRENCY` | `2` | Number of concurrent Celery worker processes in Compose |
 
 Compose defaults are for local development only; override credentials before using a shared or exposed environment.
 
@@ -39,6 +46,7 @@ Compose defaults are for local development only; override credentials before usi
 - RustFS API: host port `8080` mapped to container port `9000`.
 - RustFS console: host port `9001`.
 - PostgreSQL: host port `5432`.
+- RabbitMQ AMQP: host port `5672`; management UI: host port `15672`.
 
 All three data directories are local bind mounts and are excluded from the Docker build context. Back up data before removing or replacing these directories.
 

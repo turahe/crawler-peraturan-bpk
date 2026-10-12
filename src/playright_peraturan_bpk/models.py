@@ -10,6 +10,7 @@ from sqlalchemy import (
     Date,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
@@ -206,7 +207,10 @@ class CrawlJob(Base):
 
 class DocumentFile(Base):
     __tablename__ = "document_files"
-    __table_args__ = (UniqueConstraint("uuid", name="uq_document_files_uuid"),)
+    __table_args__ = (
+        UniqueConstraint("uuid", name="uq_document_files_uuid"),
+        Index("uq_document_files_checksum_sha256", "checksum_sha256", unique=True),
+    )
 
     id: Mapped[int] = mapped_column(PRIMARY_KEY_TYPE, primary_key=True, autoincrement=True)
     uuid: Mapped[uuid.UUID] = mapped_column(
