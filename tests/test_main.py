@@ -402,6 +402,110 @@ def test_download_uses_url_name_when_content_disposition_missing(monkeypatch, tm
     assert record.file_name == f"{record.uuid}.pdf"
 
 
+@pytest.mark.parametrize(
+    ("download_href", "expected_url"),
+    [
+        (
+            "/Download/46688/Perbup%20Bantul%20No.%2041%20Tahun%202011%20ttg%20Perubahan%20Atas%20Peraturan%20Bupati%20Bantul%20No.%2011%20Tahun%202011%20ttg%20Pelimpahan%20Sebagian%20Wewenang%20Bupati%20Kepada%20Camat.pdf",
+            "https://peraturan.bpk.go.id/Download/46688/Perbup%20Bantul%20No.%2041%20Tahun%202011%20ttg%20Perubahan%20Atas%20Peraturan%20Bupati%20Bantul%20No.%2011%20Tahun%202011%20ttg%20Pelimpahan%20Sebagian%20Wewenang%20Bupati%20Kepada%20Camat.pdf",
+        ),
+        (
+            "https://cdn.example.test/Download/46688/Perbup%20Bantul.pdf",
+            "https://cdn.example.test/Download/46688/Perbup%20Bantul.pdf",
+        ),
+    ],
+)
+def test_download_follows_read_link_for_html_response(
+    monkeypatch,
+    tmp_path,
+    session_factory,
+    download_href,
+    expected_url,
+):
+    monkeypatch.delenv("RUSTFS_ENDPOINT", raising=False)
+    detail_url = "https://peraturan.bpk.go.id/Read/46688/source-page"
+    html = f'<a class="read-btn-download" href="{download_href}">Unduh PDF</a>'
+    html_response = FakeResponse(text=html)
+    html_response.headers = {"Content-Type": "text/html; charset=UTF-8"}
+    pdf_response = FakeResponse(content=b"actual-pdf")
+    pdf_response.headers = {"Content-Type": "application/pdf", "Content-Disposition": 'attachment; filename="bantul.pdf"'}
+    requested_urls: list[str] = []
+
+    def fake_get(requested_url: str, **kwargs: object) -> FakeResponse:
+        requested_urls.append(requested_url)
+        return html_response if requested_url == detail_url else pdf_response
+
+    monkeypatch.setattr(requests, "get", fake_get)
+    crawler = BPKCrawler(output_dir=tmp_path, session_factory=session_factory, request_delay_seconds=0)
+
+    result = crawler.download_pdf(detail_url)
+
+    assert result == b"actual-pdf"
+    assert requested_urls == [detail_url, expected_url]
+    with session_factory() as session:
+        record = session.scalar(select(DocumentFile))
+    assert record is not None
+    assert record.source_url == expected_url
+    assert Path(record.storage_path).read_bytes() == b"actual-pdf"
+
+
+@pytest.mark.parametrize("mime_type", ["application/pdf", "application/xhtml+xml"])
+def test_download_does_not_follow_link_for_non_html_mime_type(monkeypatch, tmp_path, session_factory, mime_type):
+    monkeypatch.delenv("RUSTFS_ENDPOINT", raising=False)
+    response = FakeResponse(content=b"pdf-bytes")
+    response.headers = {"Content-Type": mime_type}
+    requested_urls: list[str] = []
+    monkeypatch.setattr(requests, "get", lambda url, **kwargs: requested_urls.append(url) or response)
+    crawler = BPKCrawler(output_dir=tmp_path, session_factory=session_factory, request_delay_seconds=0)
+
+    assert crawler.download_pdf("https://example.test/download") == b"pdf-bytes"
+    assert requested_urls == ["https://example.test/download"]
+
+
+def test_download_rejects_html_response_after_following_download_link(monkeypatch, tmp_path, session_factory):
+    monkeypatch.delenv("RUSTFS_ENDPOINT", raising=False)
+    detail_url = "https://example.test/Read/1"
+    download_url = "https://example.test/Download/1/file.pdf"
+    html_response = FakeResponse(text='<a class="read-btn-download" href="/Download/1/file.pdf">Unduh PDF</a>')
+    html_response.headers = {"Content-Type": "text/html"}
+    destination_response = FakeResponse(text="still HTML")
+    destination_response.headers = {"Content-Type": "text/html"}
+    requested_urls: list[str] = []
+
+    def fake_get(url: str, **kwargs: object) -> FakeResponse:
+        requested_urls.append(url)
+        return html_response if url == detail_url else destination_response
+
+    monkeypatch.setattr(requests, "get", fake_get)
+    crawler = BPKCrawler(output_dir=tmp_path, session_factory=session_factory, request_delay_seconds=0)
+
+    assert crawler.download_pdf(detail_url) is None
+    assert requested_urls == [detail_url, download_url]
+    with session_factory() as session:
+        assert session.scalar(select(DocumentFile.id)) is None
+    assert list((tmp_path / "pdf").iterdir()) == []
+
+
+@pytest.mark.parametrize(
+    "html",
+    [
+        "<html><body>No download button</body></html>",
+        '<a class="read-btn-download" href="javascript:alert(1)">Unduh PDF</a>',
+    ],
+)
+def test_download_rejects_missing_or_invalid_html_download_url(monkeypatch, tmp_path, session_factory, html):
+    monkeypatch.delenv("RUSTFS_ENDPOINT", raising=False)
+    response = FakeResponse(text=html)
+    response.headers = {"Content-Type": "text/html"}
+    monkeypatch.setattr(requests, "get", lambda *args, **kwargs: response)
+    crawler = BPKCrawler(output_dir=tmp_path, session_factory=session_factory, request_delay_seconds=0)
+
+    assert crawler.download_pdf("https://example.test/Read/1") is None
+    with session_factory() as session:
+        assert session.scalar(select(DocumentFile.id)) is None
+    assert list((tmp_path / "pdf").iterdir()) == []
+
+
 def test_download_retries_uuid_when_filename_already_exists(monkeypatch, tmp_path, session_factory):
     monkeypatch.delenv("RUSTFS_ENDPOINT", raising=False)
     first_uuid = uuid.UUID("12345678-1234-4234-8234-123456789abc")

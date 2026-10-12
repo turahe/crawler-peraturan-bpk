@@ -691,6 +691,23 @@ class BPKCrawler:
 
         raise RuntimeError("Unable to allocate a unique UUID filename after 5 attempts")
 
+    @staticmethod
+    def _resolve_download_url(base_url: str, href: str) -> str:
+        resolved_url = urljoin(base_url, href.strip())
+        parsed_url = urlsplit(resolved_url)
+        if (
+            parsed_url.scheme not in {"http", "https"}
+            or not parsed_url.hostname
+            or parsed_url.username is not None
+            or parsed_url.password is not None
+        ):
+            raise ValueError(f"Invalid PDF download URL: {href!r}")
+        try:
+            parsed_url.port
+        except ValueError as exc:
+            raise ValueError(f"Invalid port in PDF download URL: {resolved_url!r}") from exc
+        return resolved_url
+
     def download_pdf(
         self,
         url: str,
@@ -703,8 +720,29 @@ class BPKCrawler:
             response = self._get(url, timeout=60, stream=True)
 
             headers = response.headers
-            original_filename = self._original_filename(url, headers)
             mime_type = headers.get("Content-Type", "").split(";", 1)[0].strip()
+
+            if mime_type == "text/html":
+                html = response.text
+                response_url = getattr(response, "url", None) or url
+                response.close()
+                response = None
+
+                soup = BeautifulSoup(html, "html.parser")
+                download_anchor = soup.select_one("a.read-btn-download[href]")
+                href = download_anchor.get("href") if download_anchor else None
+                if not isinstance(href, str) or not href.strip():
+                    raise ValueError(f"HTML response for {url} has no read-btn-download link")
+
+                target_url = self._resolve_download_url(response_url, href)
+                response = self._get(target_url, timeout=60, stream=True)
+                headers = response.headers
+                mime_type = headers.get("Content-Type", "").split(";", 1)[0].strip()
+                if mime_type == "text/html":
+                    raise ValueError(f"Following read-btn-download from {url} returned HTML, not a file")
+                url = target_url
+
+            original_filename = self._original_filename(url, headers)
             mime_type = mime_type or mimetypes.guess_type(original_filename)[0] or "application/octet-stream"
             extension = Path(original_filename).suffix.lower()
             if not re.fullmatch(r"\.[a-z0-9]{1,16}", extension):
@@ -758,6 +796,9 @@ class BPKCrawler:
             return bytes(payload)
         except requests.RequestException as exc:
             print(f"Exception while downloading PDF: {url} -> {exc}")
+            return None
+        except ValueError as exc:
+            print(f"Invalid PDF download response for {url}: {exc}")
             return None
         except (OSError, SQLAlchemyError, RuntimeError) as exc:
             if file_path is not None:

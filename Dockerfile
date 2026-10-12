@@ -22,4 +22,4 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 COPY --from=builder /usr/local /usr/local
 COPY . .
 
-CMD ["sh", "-c", "alembic upgrade head && exec python -m playright_peraturan_bpk"]
+CMD ["python", "-m", "playright_peraturan_bpk"]
