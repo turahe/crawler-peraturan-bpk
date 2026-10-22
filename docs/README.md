@@ -8,6 +8,7 @@ This directory documents the maintained runtime: a Python crawler for Indonesian
 - [Architecture](architecture.md): runtime components and their connections.
 - [Crawler workflow](crawler.md): collection, retries, persistence, and PDF handling.
 - [Data model](data-model.md): database entities and relationships.
+- [Entity relationship diagram](erd.md): Mermaid ER diagram of the database schema.
 - [Operations](operations.md): migrations, storage, troubleshooting, and important configuration.
 - [Development](development.md): source layout and maintenance workflow.
 

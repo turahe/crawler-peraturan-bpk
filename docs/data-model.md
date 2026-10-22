@@ -18,4 +18,4 @@ Most entities have an integer primary key, a UUID, and creation/update timestamp
 
 The chunk metadata column uses PostgreSQL JSONB in PostgreSQL and a generic JSON type elsewhere. Primary keys use PostgreSQL-friendly `BigInteger` with an SQLite `Integer` variant for lightweight tests.
 
-For a complete ER overview, see the schema diagram in the root [README](../README.md#downloaded-file-storage-metadata) and the model declarations in `models.py`.
+For a complete ER overview, see the schema diagram in [erd.md](erd.md) and the model declarations in `models.py`.
