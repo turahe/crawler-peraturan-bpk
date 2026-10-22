@@ -6,10 +6,11 @@ import tempfile
 import threading
 import time
 import uuid
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from collections.abc import Callable, Mapping
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from contextlib import suppress
 from dataclasses import asdict, dataclass
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from email.message import Message
 from pathlib import Path
 from urllib.parse import parse_qs, parse_qsl, unquote, urlencode, urljoin, urlsplit, urlunsplit
@@ -236,7 +237,7 @@ class BPKCrawler:
     def extract_regulations(html: str, base_url: str = BASE_URL) -> list[dict[str, str]]:
         soup = BeautifulSoup(html, "html.parser")
         regulations: dict[str, dict[str, str]] = {}
-        anchors = soup.select(".card .col-lg-10.fs-2.fw-bold a[href*='/Details/']")
+        anchors = list(soup.select(".card .col-lg-10.fs-2.fw-bold a[href*='/Details/']"))
         if not anchors:
             anchors = [
                 anchor
@@ -311,7 +312,11 @@ class BPKCrawler:
     @staticmethod
     def _canonical_search_url(url: str) -> str:
         parsed = urlsplit(url)
-        query = [(key, value) for key, value in parse_qsl(parsed.query, keep_blank_values=True) if not (key == "p" and value == "1")]
+        query = [
+            (key, value)
+            for key, value in parse_qsl(parsed.query, keep_blank_values=True)
+            if not (key == "p" and value == "1")
+        ]
         return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, urlencode(query), ""))
 
     def _save_subject(self, item: dict[str, str]) -> int:
@@ -357,7 +362,7 @@ class BPKCrawler:
         job.error_message = error_message
         if attempts is not None:
             job.attempts = attempts
-        job.completed_at = datetime.now(timezone.utc) if status in {"completed", "failed"} else None
+        job.completed_at = datetime.now(UTC) if status in {"completed", "failed"} else None
         return job
 
     def _save_regulations(
@@ -371,9 +376,7 @@ class BPKCrawler:
             if subject is None:
                 raise LookupError(f"Subject {subject_id} disappeared while saving regulations")
             for item in items:
-                regulation = session.scalar(
-                    select(Regulation).where(Regulation.source_id == item["source_id"])
-                )
+                regulation = session.scalar(select(Regulation).where(Regulation.source_id == item["source_id"]))
                 if regulation is None:
                     regulation = Regulation(
                         source_id=item["source_id"],
@@ -538,9 +541,7 @@ class BPKCrawler:
 
     def _persist_storage_key(self, file_path: Path, storage_key: str) -> None:
         with self.session_factory() as session, session.begin():
-            file_row = session.scalar(
-                select(DocumentFile).where(DocumentFile.storage_path == str(file_path.resolve()))
-            )
+            file_row = session.scalar(select(DocumentFile).where(DocumentFile.storage_path == str(file_path.resolve())))
             if file_row is None:
                 raise LookupError(f"No document file row for {file_path}")
             file_row.storage_key = storage_key
@@ -578,11 +579,14 @@ class BPKCrawler:
         successful_downloads: list[str] = []
         failed_downloads: list[str] = []
         for pdf in pdfs:
-            if self.download_pdf(
-                pdf,
-                regulation_id=regulation_id,
-                include_payload=False,
-            ) is None:
+            if (
+                self.download_pdf(
+                    pdf,
+                    regulation_id=regulation_id,
+                    include_payload=False,
+                )
+                is None
+            ):
                 failed_downloads.append(pdf)
             else:
                 successful_downloads.append(pdf)
@@ -681,29 +685,28 @@ class BPKCrawler:
 
             linked_file = False
             try:
-                with self.session_factory() as session:
-                    with session.begin():
-                        # A same-directory hard link atomically publishes the complete file without overwriting.
-                        os.link(temporary_path, file_path)
-                        linked_file = True
-                        file_row = DocumentFile(
-                            uuid=file_uuid,
-                            regulation_id=regulation_id,
-                            hash=metadata.checksum_sha256,
-                            file_name=file_name,
-                            original_file_name=metadata.original_file_name,
-                            file_extension=extension,
-                            disk="local",
-                            mime_type=metadata.mime_type,
-                            size=metadata.size,
-                            source_url=metadata.source_url,
-                            storage_key=None,
-                            storage_path=str(file_path.resolve()),
-                            checksum_sha256=metadata.checksum_sha256,
-                            downloaded_at=metadata.downloaded_at,
-                        )
-                        session.add(file_row)
-                        session.flush()
+                with self.session_factory() as session, session.begin():
+                    # A same-directory hard link atomically publishes the complete file without overwriting.
+                    os.link(temporary_path, file_path)
+                    linked_file = True
+                    file_row = DocumentFile(
+                        uuid=file_uuid,
+                        regulation_id=regulation_id,
+                        hash=metadata.checksum_sha256,
+                        file_name=file_name,
+                        original_file_name=metadata.original_file_name,
+                        file_extension=extension,
+                        disk="local",
+                        mime_type=metadata.mime_type,
+                        size=metadata.size,
+                        source_url=metadata.source_url,
+                        storage_key=None,
+                        storage_path=str(file_path.resolve()),
+                        checksum_sha256=metadata.checksum_sha256,
+                        downloaded_at=metadata.downloaded_at,
+                    )
+                    session.add(file_row)
+                    session.flush()
                 return file_path
             except FileExistsError:
                 continue
@@ -715,9 +718,7 @@ class BPKCrawler:
                 if self._is_checksum_collision(exc):
                     with self.session_factory() as session:
                         existing = session.scalar(
-                            select(DocumentFile).where(
-                                DocumentFile.checksum_sha256 == metadata.checksum_sha256
-                            )
+                            select(DocumentFile).where(DocumentFile.checksum_sha256 == metadata.checksum_sha256)
                         )
                         if existing is not None:
                             existing_path = (
@@ -726,10 +727,8 @@ class BPKCrawler:
                                 else self.pdf_dir / (existing.file_name or "")
                             )
                             if not existing_path.is_file() and existing.file_name:
-                                try:
+                                with suppress(FileExistsError):
                                     os.link(temporary_path, existing_path)
-                                except FileExistsError:
-                                    pass
                             if existing_path.is_file():
                                 print(
                                     "PDF with SHA-256 "
@@ -759,7 +758,7 @@ class BPKCrawler:
         ):
             raise ValueError(f"Invalid PDF download URL: {href!r}")
         try:
-            parsed_url.port
+            _port = parsed_url.port
         except ValueError as exc:
             raise ValueError(f"Invalid port in PDF download URL: {resolved_url!r}") from exc
         return resolved_url
@@ -830,7 +829,7 @@ class BPKCrawler:
                 temporary_file.flush()
                 os.fsync(temporary_file.fileno())
 
-            downloaded_at = datetime.now(timezone.utc)
+            downloaded_at = datetime.now(UTC)
             checksum_sha256 = checksum.hexdigest()
             file_path = self._persist_file(
                 temporary_path,
@@ -993,30 +992,41 @@ class BPKCrawler:
                 if regulation is None:
                     raise LookupError(f"Regulation {regulation_id} does not exist")
                 detail_url = regulation.detail_url
-                self._set_crawl_status(
-                    session, regulation_id=regulation_id, stage="detail", status="detail_processing"
-                )
+                self._set_crawl_status(session, regulation_id=regulation_id, stage="detail", status="detail_processing")
 
             detail_html = self.crawl_bpk_details(detail_url)
             if not detail_html:
-                raise RuntimeError(f"Could not retrieve detail page {detail_url}: {self._last_request_error or 'request failed'}")
+                raise RuntimeError(
+                    f"Could not retrieve detail page {detail_url}: {self._last_request_error or 'request failed'}"
+                )
             metadata = self.parse_detail_metadata(detail_html)
             if metadata is None:
                 raise ValueError(f"No regulation metadata found on detail page: {detail_url}")
-            if not self.download_pdfs(detail_url, page_html=detail_html, regulation_id=regulation_id,
-                                      detail_metadata=metadata):
+            if not self.download_pdfs(
+                detail_url, page_html=detail_html, regulation_id=regulation_id, detail_metadata=metadata
+            ):
                 raise RuntimeError(f"No PDF was downloaded for regulation: {detail_url}")
             with self.session_factory() as session, session.begin():
-                self._set_crawl_status(session, regulation_id=regulation_id, stage="completed",
-                                       status="completed", attempts=self._last_request_attempts)
+                self._set_crawl_status(
+                    session,
+                    regulation_id=regulation_id,
+                    stage="completed",
+                    status="completed",
+                    attempts=self._last_request_attempts,
+                )
             return True
         except (requests.RequestException, SQLAlchemyError, LookupError, RuntimeError, ValueError, OSError) as exc:
             print(f"Regulation {regulation_id} failed: {exc}")
             try:
                 with self.session_factory() as session, session.begin():
-                    self._set_crawl_status(session, regulation_id=regulation_id, stage="failed",
-                                           status="failed", error_message=str(exc),
-                                           attempts=self._last_request_attempts)
+                    self._set_crawl_status(
+                        session,
+                        regulation_id=regulation_id,
+                        stage="failed",
+                        status="failed",
+                        error_message=str(exc),
+                        attempts=self._last_request_attempts,
+                    )
             except SQLAlchemyError as status_error:
                 print(f"Could not persist regulation failure status: {status_error}")
             return False

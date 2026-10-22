@@ -2,10 +2,8 @@ import sys
 from logging.config import fileConfig
 from pathlib import Path
 
-from sqlalchemy import engine_from_config
-from sqlalchemy import pool
-
 from alembic import context
+from sqlalchemy import engine_from_config, pool
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
@@ -14,8 +12,8 @@ for candidate in (ROOT, SRC):
     if path not in sys.path:
         sys.path.insert(0, path)
 
-from playright_peraturan_bpk.database import DATABASE_URL
-from playright_peraturan_bpk.models import Base
+from playright_peraturan_bpk.database import DATABASE_URL  # noqa: E402
+from playright_peraturan_bpk.models import Base  # noqa: E402
 
 config = context.config
 config.set_main_option("sqlalchemy.url", DATABASE_URL.replace("%", "%%"))
@@ -70,9 +68,7 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
-        context.configure(
-            connection=connection, target_metadata=target_metadata
-        )
+        context.configure(connection=connection, target_metadata=target_metadata)
 
         with context.begin_transaction():
             context.run_migrations()

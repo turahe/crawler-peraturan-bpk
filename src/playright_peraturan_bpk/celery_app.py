@@ -4,7 +4,6 @@ import os
 
 from celery import Celery
 
-
 app = Celery(
     "playright_peraturan_bpk",
     broker=os.getenv("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/%2F"),

@@ -131,11 +131,13 @@ def test_get_does_not_retry_permanent_http_error(monkeypatch, tmp_path, session_
 
 def test_extract_subjects_uses_search_links_and_strips_result_counts(monkeypatch, tmp_path, session_factory):
     crawler = BPKCrawler(output_dir=tmp_path, session_factory=session_factory, request_delay_seconds=0)
-    response = FakeResponse(text="""
+    response = FakeResponse(
+        text="""
     <a href="/Search?tema=1">Administrasi dan Tata Usaha Negara [7.953]</a>
     <a href="https://peraturan.bpk.go.id/Search?tema=2">Agraria [4,425]</a>
     <a href="/Details/42/peraturan">Not a subject</a>
-    """)
+    """
+    )
     response.headers = {}
     monkeypatch.setattr(requests, "get", lambda *args, **kwargs: response)
 
@@ -334,11 +336,14 @@ def test_detail_metadata_persists_when_no_pdf_link_exists(tmp_path, session_fact
     crawler = BPKCrawler(output_dir=tmp_path, session_factory=session_factory, request_delay_seconds=0)
     detail_without_pdf = DETAIL_PAGE_HTML.split('<a href="/Download/', 1)[0]
 
-    assert crawler.download_pdfs(
-        "https://peraturan.bpk.go.id/Details/347827/regulation",
-        page_html=detail_without_pdf,
-        regulation_id=regulation_id,
-    ) == []
+    assert (
+        crawler.download_pdfs(
+            "https://peraturan.bpk.go.id/Details/347827/regulation",
+            page_html=detail_without_pdf,
+            regulation_id=regulation_id,
+        )
+        == []
+    )
 
     with session_factory() as session:
         metadata = session.scalar(select(DocumentMetadata).where(DocumentMetadata.regulation_id == regulation_id))
@@ -428,7 +433,10 @@ def test_download_follows_read_link_for_html_response(
     html_response = FakeResponse(text=html)
     html_response.headers = {"Content-Type": "text/html; charset=UTF-8"}
     pdf_response = FakeResponse(content=b"actual-pdf")
-    pdf_response.headers = {"Content-Type": "application/pdf", "Content-Disposition": 'attachment; filename="bantul.pdf"'}
+    pdf_response.headers = {
+        "Content-Type": "application/pdf",
+        "Content-Disposition": 'attachment; filename="bantul.pdf"',
+    }
     requested_urls: list[str] = []
 
     def fake_get(requested_url: str, **kwargs: object) -> FakeResponse:
@@ -455,7 +463,12 @@ def test_download_does_not_follow_link_for_non_html_mime_type(monkeypatch, tmp_p
     response = FakeResponse(content=b"pdf-bytes")
     response.headers = {"Content-Type": mime_type}
     requested_urls: list[str] = []
-    monkeypatch.setattr(requests, "get", lambda url, **kwargs: requested_urls.append(url) or response)
+
+    def fake_get(url, **kwargs):
+        requested_urls.append(url)
+        return response
+
+    monkeypatch.setattr(requests, "get", fake_get)
     crawler = BPKCrawler(output_dir=tmp_path, session_factory=session_factory, request_delay_seconds=0)
 
     assert crawler.download_pdf("https://example.test/download") == b"pdf-bytes"

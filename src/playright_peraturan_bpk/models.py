@@ -58,11 +58,11 @@ class Subject(Base):
         onupdate=func.now(),
     )
 
-    regulations: Mapped[list["Regulation"]] = relationship(
+    regulations: Mapped[list[Regulation]] = relationship(
         secondary="regulation_subjects",
         back_populates="subjects",
     )
-    crawl_jobs: Mapped[list["CrawlJob"]] = relationship(back_populates="subject")
+    crawl_jobs: Mapped[list[CrawlJob]] = relationship(back_populates="subject")
 
 
 class Regulation(Base):
@@ -103,17 +103,17 @@ class Regulation(Base):
         secondary="regulation_subjects",
         back_populates="regulations",
     )
-    crawl_jobs: Mapped[list["CrawlJob"]] = relationship(back_populates="regulation")
-    document_files: Mapped[list["DocumentFile"]] = relationship(back_populates="regulation")
-    document_metadata: Mapped["DocumentMetadata | None"] = relationship(
+    crawl_jobs: Mapped[list[CrawlJob]] = relationship(back_populates="regulation")
+    document_files: Mapped[list[DocumentFile]] = relationship(back_populates="regulation")
+    document_metadata: Mapped[DocumentMetadata | None] = relationship(
         back_populates="regulation",
         uselist=False,
     )
-    source_relations: Mapped[list["RegulationRelation"]] = relationship(
+    source_relations: Mapped[list[RegulationRelation]] = relationship(
         foreign_keys="RegulationRelation.source_regulation_id",
         back_populates="source_regulation",
     )
-    target_relations: Mapped[list["RegulationRelation"]] = relationship(
+    target_relations: Mapped[list[RegulationRelation]] = relationship(
         foreign_keys="RegulationRelation.target_regulation_id",
         back_populates="target_regulation",
     )
@@ -251,18 +251,16 @@ class DocumentFile(Base):
     )
 
     regulation: Mapped[Regulation] = relationship(back_populates="document_files")
-    document_metadata: Mapped["DocumentMetadata | None"] = relationship(
+    document_metadata: Mapped[DocumentMetadata | None] = relationship(
         back_populates="document_file",
         uselist=False,
     )
-    pages: Mapped[list["DocumentPage"]] = relationship(back_populates="document_file")
+    pages: Mapped[list[DocumentPage]] = relationship(back_populates="document_file")
 
 
 class DocumentMetadata(Base):
     __tablename__ = "document_metadata"
-    __table_args__ = (
-        UniqueConstraint("document_file_id", name="document_metadata_document_file_id_key"),
-    )
+    __table_args__ = (UniqueConstraint("document_file_id", name="document_metadata_document_file_id_key"),)
 
     id: Mapped[int] = mapped_column(PRIMARY_KEY_TYPE, primary_key=True, autoincrement=True)
     document_file_id: Mapped[int | None] = mapped_column(
@@ -349,7 +347,7 @@ class DocumentPage(Base):
     )
 
     document_file: Mapped[DocumentFile] = relationship(back_populates="pages")
-    chunks: Mapped[list["DocumentChunk"]] = relationship(back_populates="document_page")
+    chunks: Mapped[list[DocumentChunk]] = relationship(back_populates="document_page")
 
 
 class DocumentChunk(Base):
@@ -449,13 +447,13 @@ class RegulationRelation(Base):
 
 __all__ = [
     "Base",
-    "Subject",
-    "Regulation",
-    "RegulationSubject",
     "CrawlJob",
+    "DocumentChunk",
     "DocumentFile",
     "DocumentMetadata",
     "DocumentPage",
-    "DocumentChunk",
+    "Regulation",
     "RegulationRelation",
+    "RegulationSubject",
+    "Subject",
 ]
