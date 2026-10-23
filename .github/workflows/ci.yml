@@ -115,6 +115,7 @@ jobs:
         with:
           context: .
           file: ./Dockerfile
+          target: runtime
           push: false
           load: true
           tags: playright-peraturan-bpk:ci

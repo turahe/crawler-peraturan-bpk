@@ -17,6 +17,8 @@ from urllib.parse import parse_qs, parse_qsl, unquote, urlencode, urljoin, urlsp
 
 import requests
 from bs4 import BeautifulSoup
+from pypdf import PdfReader
+from pypdf.errors import PdfReadError
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -763,6 +765,19 @@ class BPKCrawler:
             raise ValueError(f"Invalid port in PDF download URL: {resolved_url!r}") from exc
         return resolved_url
 
+    @staticmethod
+    def _requires_pdf_validation(mime_type: str, extension: str) -> bool:
+        return extension == ".pdf" or mime_type in {"application/pdf", "application/x-pdf"}
+
+    @staticmethod
+    def _validate_pdf(path: Path) -> None:
+        try:
+            with PdfReader(path) as reader:
+                if not reader.is_encrypted and len(reader.pages) < 1:
+                    raise ValueError("PDF has no pages")
+        except PdfReadError as exc:
+            raise ValueError(f"Downloaded file is not a valid PDF: {exc}") from exc
+
     def download_pdf(
         self,
         url: str,
@@ -828,6 +843,11 @@ class BPKCrawler:
                         payload.extend(chunk)
                 temporary_file.flush()
                 os.fsync(temporary_file.fileno())
+
+            if temporary_path is None:
+                raise RuntimeError("PDF download did not create a temporary file")
+            if self._requires_pdf_validation(mime_type, extension):
+                self._validate_pdf(temporary_path)
 
             downloaded_at = datetime.now(UTC)
             checksum_sha256 = checksum.hexdigest()

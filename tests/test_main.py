@@ -3,10 +3,12 @@ from __future__ import annotations
 import hashlib
 import uuid
 from collections.abc import Iterator
+from io import BytesIO
 from pathlib import Path
 
 import pytest
 import requests
+from pypdf import PdfWriter
 from sqlalchemy import create_engine, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
@@ -14,6 +16,17 @@ from sqlalchemy.pool import StaticPool
 
 from playright_peraturan_bpk.main import BPKCrawler
 from playright_peraturan_bpk.models import Base, CrawlJob, DocumentFile, DocumentMetadata, Regulation, Subject
+
+
+def _valid_pdf_bytes() -> bytes:
+    buffer = BytesIO()
+    writer = PdfWriter()
+    writer.add_blank_page(width=72, height=72)
+    writer.write(buffer)
+    return buffer.getvalue()
+
+
+VALID_PDF = _valid_pdf_bytes()
 
 
 @pytest.fixture
@@ -34,7 +47,7 @@ class FakeResponse:
         "Content-Disposition": 'attachment; filename="original document.pdf"',
     }
 
-    def __init__(self, content: bytes = b"fake-pdf", text: str = "", status_code: int = 200) -> None:
+    def __init__(self, content: bytes = VALID_PDF, text: str = "", status_code: int = 200) -> None:
         self.content = content
         self.text = text
         self.status_code = status_code
@@ -205,7 +218,7 @@ def test_run_persists_subject_regulations_metadata_files_and_completed_jobs(
 
     def fake_get(url: str, **kwargs: object) -> FakeResponse:
         requested.append(url)
-        response = FakeResponse(b"regulation-pdf", text=responses.get(url, ""))
+        response = FakeResponse(VALID_PDF, text=responses.get(url, ""))
         response.headers = {
             "Content-Type": "application/pdf",
             "Content-Disposition": 'attachment; filename="signed-copy.pdf"',
@@ -236,7 +249,7 @@ def test_run_persists_subject_regulations_metadata_files_and_completed_jobs(
 
     assert subject is not None and subject.name == "KODE ETIK"
     assert regulation is not None and regulation.detail_url == detail_url
-    assert file_row is not None and Path(file_row.storage_path).read_bytes() == b"regulation-pdf"
+    assert file_row is not None and Path(file_row.storage_path).read_bytes() == VALID_PDF
     assert metadata is not None
     assert metadata.document_file_id == file_row.id
     assert metadata.title == "Peraturan Badan Pemeriksa Keuangan Nomor 2 Tahun 2026 tentang Kode Etik"
@@ -309,7 +322,7 @@ def test_parse_detail_metadata_extracts_labels_and_indonesian_dates():
 def test_detail_page_metadata_is_saved_with_downloaded_file(monkeypatch, tmp_path, session_factory):
     monkeypatch.delenv("RUSTFS_ENDPOINT", raising=False)
     crawler = BPKCrawler(output_dir=tmp_path, session_factory=session_factory)
-    monkeypatch.setattr(requests, "get", lambda *args, **kwargs: FakeResponse(b"regulation-pdf"))
+    monkeypatch.setattr(requests, "get", lambda *args, **kwargs: FakeResponse(VALID_PDF))
 
     pdf_urls = crawler.download_pdfs(
         "https://peraturan.bpk.go.id/Details/347827/regulation",
@@ -362,7 +375,7 @@ def _create_test_regulation(session_factory: sessionmaker[Session]) -> int:
 
 def test_download_persists_uuid_file_and_comprehensive_metadata(monkeypatch, tmp_path, session_factory):
     monkeypatch.delenv("RUSTFS_ENDPOINT", raising=False)
-    content = b"fake-pdf-content"
+    content = VALID_PDF
     crawler = BPKCrawler(output_dir=tmp_path, session_factory=session_factory)
     monkeypatch.setattr(requests, "get", lambda *args, **kwargs: FakeResponse(content))
 
@@ -398,7 +411,7 @@ def test_download_uses_url_name_when_content_disposition_missing(monkeypatch, tm
     crawler = BPKCrawler(output_dir=tmp_path, session_factory=session_factory)
     monkeypatch.setattr(requests, "get", lambda *args, **kwargs: response)
 
-    assert crawler.download_pdf("https://example.com/files/Salinan%20Peraturan.pdf") == b"fake-pdf"
+    assert crawler.download_pdf("https://example.com/files/Salinan%20Peraturan.pdf") == VALID_PDF
     with session_factory() as session:
         record = session.scalar(select(DocumentFile))
 
@@ -432,7 +445,7 @@ def test_download_follows_read_link_for_html_response(
     html = f'<a class="read-btn-download" href="{download_href}">Unduh PDF</a>'
     html_response = FakeResponse(text=html)
     html_response.headers = {"Content-Type": "text/html; charset=UTF-8"}
-    pdf_response = FakeResponse(content=b"actual-pdf")
+    pdf_response = FakeResponse(content=VALID_PDF)
     pdf_response.headers = {
         "Content-Type": "application/pdf",
         "Content-Disposition": 'attachment; filename="bantul.pdf"',
@@ -448,19 +461,19 @@ def test_download_follows_read_link_for_html_response(
 
     result = crawler.download_pdf(detail_url)
 
-    assert result == b"actual-pdf"
+    assert result == VALID_PDF
     assert requested_urls == [detail_url, expected_url]
     with session_factory() as session:
         record = session.scalar(select(DocumentFile))
     assert record is not None
     assert record.source_url == expected_url
-    assert Path(record.storage_path).read_bytes() == b"actual-pdf"
+    assert Path(record.storage_path).read_bytes() == VALID_PDF
 
 
 @pytest.mark.parametrize("mime_type", ["application/pdf", "application/xhtml+xml"])
 def test_download_does_not_follow_link_for_non_html_mime_type(monkeypatch, tmp_path, session_factory, mime_type):
     monkeypatch.delenv("RUSTFS_ENDPOINT", raising=False)
-    response = FakeResponse(content=b"pdf-bytes")
+    response = FakeResponse(content=VALID_PDF)
     response.headers = {"Content-Type": mime_type}
     requested_urls: list[str] = []
 
@@ -471,8 +484,34 @@ def test_download_does_not_follow_link_for_non_html_mime_type(monkeypatch, tmp_p
     monkeypatch.setattr(requests, "get", fake_get)
     crawler = BPKCrawler(output_dir=tmp_path, session_factory=session_factory, request_delay_seconds=0)
 
-    assert crawler.download_pdf("https://example.test/download") == b"pdf-bytes"
+    assert crawler.download_pdf("https://example.test/download") == VALID_PDF
     assert requested_urls == ["https://example.test/download"]
+
+
+def test_download_rejects_pdf_url_pypdf_cannot_read(monkeypatch, tmp_path, session_factory):
+    monkeypatch.delenv("RUSTFS_ENDPOINT", raising=False)
+    response = FakeResponse(content=b"%PDF-1.4\nthis is not a readable pdf")
+    monkeypatch.setattr(requests, "get", lambda *args, **kwargs: response)
+    crawler = BPKCrawler(output_dir=tmp_path, session_factory=session_factory, request_delay_seconds=0)
+
+    assert crawler.download_pdf("https://example.com/file.pdf") is None
+    with session_factory() as session:
+        assert session.scalar(select(DocumentFile.id)) is None
+    assert list((tmp_path / "pdf").iterdir()) == []
+
+
+def test_download_rejects_pdf_with_no_pages(monkeypatch, tmp_path, session_factory):
+    monkeypatch.delenv("RUSTFS_ENDPOINT", raising=False)
+    buffer = BytesIO()
+    PdfWriter().write(buffer)
+    response = FakeResponse(content=buffer.getvalue())
+    monkeypatch.setattr(requests, "get", lambda *args, **kwargs: response)
+    crawler = BPKCrawler(output_dir=tmp_path, session_factory=session_factory, request_delay_seconds=0)
+
+    assert crawler.download_pdf("https://example.com/empty.pdf") is None
+    with session_factory() as session:
+        assert session.scalar(select(DocumentFile.id)) is None
+    assert list((tmp_path / "pdf").iterdir()) == []
 
 
 def test_download_rejects_html_response_after_following_download_link(monkeypatch, tmp_path, session_factory):
@@ -531,14 +570,14 @@ def test_download_retries_uuid_when_filename_already_exists(monkeypatch, tmp_pat
     monkeypatch.setattr(requests, "get", lambda *args, **kwargs: FakeResponse())
     crawler = BPKCrawler(output_dir=tmp_path, session_factory=session_factory)
 
-    assert crawler.download_pdf("https://example.com/file.pdf") == b"fake-pdf"
+    assert crawler.download_pdf("https://example.com/file.pdf") == VALID_PDF
 
     with session_factory() as session:
         record = session.scalar(select(DocumentFile))
     assert record is not None
     assert record.uuid == second_uuid
     assert existing_path.read_bytes() == b"existing file"
-    assert (tmp_path / "pdf" / record.file_name).read_bytes() == b"fake-pdf"
+    assert (tmp_path / "pdf" / record.file_name).read_bytes() == VALID_PDF
 
 
 def test_download_retries_uuid_when_uuid_already_exists_in_database(monkeypatch, tmp_path, session_factory):
@@ -553,12 +592,12 @@ def test_download_retries_uuid_when_uuid_already_exists_in_database(monkeypatch,
     monkeypatch.setattr(requests, "get", lambda *args, **kwargs: FakeResponse())
     crawler = BPKCrawler(output_dir=tmp_path, session_factory=session_factory)
 
-    assert crawler.download_pdf("https://example.com/file.pdf") == b"fake-pdf"
+    assert crawler.download_pdf("https://example.com/file.pdf") == VALID_PDF
     with session_factory() as session:
         records = session.scalars(select(DocumentFile).order_by(DocumentFile.id)).all()
 
     assert [record.uuid for record in records] == [first_uuid, second_uuid]
-    assert (tmp_path / "pdf" / f"{second_uuid}.pdf").read_bytes() == b"fake-pdf"
+    assert (tmp_path / "pdf" / f"{second_uuid}.pdf").read_bytes() == VALID_PDF
 
 
 def test_disk_write_failure_does_not_create_metadata(monkeypatch, tmp_path, session_factory):
@@ -645,9 +684,9 @@ def test_download_uploads_uuid_filename_to_rustfs(monkeypatch, tmp_path, session
         "playright_peraturan_bpk.main.boto3",
         type("B", (), {"client": staticmethod(fake_client)}),
     )
-    monkeypatch.setattr(requests, "get", lambda *args, **kwargs: FakeResponse(b"rustfs-pdf"))
+    monkeypatch.setattr(requests, "get", lambda *args, **kwargs: FakeResponse(VALID_PDF))
 
-    assert crawler.download_pdf("https://example.com/other.pdf") == b"rustfs-pdf"
+    assert crawler.download_pdf("https://example.com/other.pdf") == VALID_PDF
 
     with session_factory() as session:
         record = session.scalar(select(DocumentFile))

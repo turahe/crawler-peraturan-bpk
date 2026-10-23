@@ -68,6 +68,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      target: runtime
     user: "0:0"
     env_file:
       - .env
@@ -86,6 +87,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      target: runtime
     user: "0:0"
     restart: on-failure
     env_file:
@@ -113,10 +115,19 @@ services:
       rabbitmq:
         condition: service_healthy
 
+  test:
+    profiles:
+      - test
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: test
+
   worker:
     build:
       context: .
       dockerfile: Dockerfile
+      target: runtime
     user: "0:0"
     restart: unless-stopped
     env_file:

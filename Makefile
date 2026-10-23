@@ -1,9 +1,13 @@
 help:
 	@echo "Available targets:"
+	@echo "  test              Run the test suite in Docker"
 	@echo "  migrate-db        Apply database migrations (Alembic upgrade head)"
 	@echo "  build-docker      Build the Docker Compose app image"
 	@echo "  run-docker        Start the Docker Compose services"
 	@echo "  run-build-docker  Build and start the Docker Compose services"
+
+test:
+	docker compose --profile test run --build --rm --no-deps test
 
 migrate-db:
 	docker compose run --build --rm app alembic upgrade head
