@@ -11,6 +11,14 @@ app = Celery(
 )
 app.conf.update(
     task_default_queue=os.getenv("RABBITMQ_QUEUE", "regulation_crawl"),
+    # RabbitMQ 4.3 rejects transient non-exclusive queues and global QoS.
+    # Exclusive control and event queues match the Celery 5.7 defaults.
+    # A quorum task queue uses per-consumer QoS instead of global QoS.
+    control_queue_exclusive=True,
+    event_queue_exclusive=True,
+    task_default_queue_type="quorum",
+    task_default_exchange_type="topic",
+    broker_transport_options={"confirm_publish": True},
     task_serializer="json",
     accept_content=["json"],
     result_backend=None,

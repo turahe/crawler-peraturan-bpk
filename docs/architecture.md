@@ -27,7 +27,7 @@ The app discovers subjects and regulations, persists them, and submits Celery ta
 
 ## Compose startup dependency chain
 
-PostgreSQL must pass `pg_isready` before `migrate` runs. The producer and Celery worker wait for migration and RabbitMQ health. `rabbitmq.conf` permits the transient startup reply queue and global QoS used by the current Celery AMQP transport with RabbitMQ 4. Celery late-acknowledges tasks, cancels active late-ack tasks on broker connection loss so they can be redelivered, and retries failed regulation processing up to three times with backoff; failures are recorded in `crawl_jobs`. RustFS is not configured with a Compose health check, so `service_started` means its container has started, not that it is already accepting S3 requests. Local PDF download remains available independently of RustFS upload.
+PostgreSQL must pass `pg_isready` before `migrate` runs. The producer and Celery worker wait for migration and RabbitMQ health. Celery declares exclusive control and event queues and a quorum task queue so RabbitMQ 4.3 does not need its deprecated transient non-exclusive queues or global QoS. Celery late-acknowledges tasks, cancels active late-ack tasks on broker connection loss so they can be redelivered, and retries failed regulation processing up to three times with backoff; failures are recorded in `crawl_jobs`. RustFS is not configured with a Compose health check, so `service_started` means its container has started, not that it is already accepting S3 requests. Local PDF download remains available independently of RustFS upload.
 
 ## Persistence boundaries
 

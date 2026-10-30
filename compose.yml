@@ -1,6 +1,7 @@
 services:
   rabbitmq:
-    image: rabbitmq:4-management
+  # docker pull rabbitmq:management-alpine
+    image: rabbitmq:management-alpine
     restart: unless-stopped
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-crawler}
@@ -10,7 +11,7 @@ services:
       - "15672:15672"
     volumes:
       - ./data/rabbitmq:/var/lib/rabbitmq
-      - ./docker/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      # - ./docker/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 10s

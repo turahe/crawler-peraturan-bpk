@@ -31,7 +31,7 @@ Create a new revision with Alembic's normal revision workflow, inspect the gener
 | `CRAWLER_THREADS` | `4` | Maximum concurrent regulation processors in inline mode |
 | `CRAWLER_MODE` | `producer` in Compose; `inline` locally | `producer` dispatches Celery tasks; `inline` runs both stages in one process |
 | `RABBITMQ_URL` | `amqp://crawler:crawler-password@localhost:5672/%2F` | RabbitMQ AMQP connection URL |
-| `RABBITMQ_QUEUE` | `regulation_crawl` | Durable queue for regulation IDs |
+| `RABBITMQ_QUEUE` | `regulation_crawl` | Quorum queue for regulation IDs |
 | `RABBITMQ_USER` | `crawler` in Compose | RabbitMQ application user |
 | `RABBITMQ_PASSWORD` | `crawler-password` in Compose | RabbitMQ application password |
 | `CELERY_CONCURRENCY` | `2` | Number of concurrent Celery worker processes in Compose |
