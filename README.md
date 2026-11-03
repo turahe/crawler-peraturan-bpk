@@ -31,3 +31,39 @@ On a regulation detail page, the crawler reads each `.row` containing a `.col-lg
 Run the crawler with `docker compose up -d --build`. Compose waits for PostgreSQL's readiness check, runs the dedicated migration service once, and starts the crawler only after migrations succeed. It fetches `/Subjek`, persists each subject and its `/Search?tema=<id>` URL, follows all pagination links, upserts regulation IDs and `/Details/<id>/<slug>` URLs, then extracts detail metadata and downloads every PDF link. Regulation metadata is stored once per regulation and linked to its first downloaded file when available; a regulation without PDFs can still retain its scraped metadata.
 
 `crawl_jobs` tracks subject stages (`subjek_extracted`, `peraturan_list_extracted`) and regulation stages (`peraturan_list_extracted`, `detail_processing`, `completed`, `failed`). Completed/failed regulation jobs have `completed_at`; failures retain the error message and attempt count. HTTP GETs default to three attempts with exponential retry delays and a 0.5-second minimum interval between requests. Set `CRAWLER_REQUEST_DELAY_SECONDS` to tune the interval. The run prints discovered and completed subjects/regulations, total completed entities, failures, and downloaded PDFs.
+
+## Code quality and coverage
+
+Continuous integration runs two external quality services on every push and pull request:
+
+- **SonarCloud** performs static analysis for bugs, code smells, and security vulnerabilities, and enforces the project quality gate. Configuration lives in [sonar-project.properties](sonar-project.properties).
+- **Codecov** tracks line and branch coverage, comments the coverage delta on pull requests, and enforces the project (70%) and patch (80%) thresholds. Configuration lives in [codecov.yml](codecov.yml).
+
+Both services are wired into the `quality` and `sonar` jobs in [.github/workflows/ci.yml](.github/workflows/ci.yml). Coverage is collected once by `pytest --cov-report=xml` and shared with both services.
+
+### Required CI secrets
+
+Add the following secrets under **Settings → Secrets and variables → Actions** before the workflow can publish results:
+
+| Secret | Purpose |
+| --- | --- |
+| `SONAR_TOKEN` | SonarCloud analysis token from <https://sonarcloud.io/account/security>. |
+| `CODECOV_TOKEN` | Repository upload token from the Codecov project settings page. |
+
+Replace the placeholder `sonar.organization` and `sonar.projectKey` values in [sonar-project.properties](sonar-project.properties) with your own SonarCloud organization and project (the convention is `<organization>_<repository>`).
+
+### Verifying locally
+
+```sh
+uv sync --group dev
+uv run pytest --cov --cov-report=term-missing --cov-report=xml
+```
+
+This writes `coverage.xml`, the report consumed by SonarCloud and Codecov.
+
+### Viewing reports
+
+- SonarCloud dashboard: `https://sonarcloud.io/project/overview?id=<sonar.projectKey>`.
+- Codecov dashboard: `https://app.codecov.io/gh/<owner>/<repository>`.
+- To block non-compliant changes, enable the SonarCloud quality gate check and the Codecov `project`/`patch` status checks as required status checks under **Settings → Branches**.
+

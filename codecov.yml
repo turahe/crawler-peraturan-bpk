@@ -1,0 +1,49 @@
+# Codecov configuration.
+#
+# The status checks defined below become a GitHub check on every pull request.
+# Enable them as required checks under Settings > Branches to block merges that
+# fall below the thresholds.
+
+codecov:
+  require_ci_to_pass: true
+  notify:
+    wait_for_ci: true
+
+coverage:
+  precision: 2
+  round: down
+  range: "70...100"
+  status:
+    # Overall project coverage: must stay at or above 70%.
+    project:
+      default:
+        target: 70%
+        threshold: 1%
+        if_ci_failed: error
+    # Coverage of the lines touched by the pull request: must reach 80%.
+    patch:
+      default:
+        target: 80%
+        threshold: 5%
+        if_ci_failed: error
+
+comment:
+  # Show the coverage delta and per-file breakdown on the pull request.
+  layout: "reach, diff, flags, files"
+  behavior: default
+  require_changes: false
+  require_head: true
+  # Only comment on pull requests targeting the long-lived branches.
+  branches:
+    - main
+    - develop
+
+github_checks:
+  annotations: true
+
+# Files that do not represent shipped application code.
+ignore:
+  - "tests/**"
+  - "migrations/**"
+  - ".specify/**"
+  - "graphify-out/**"

@@ -30,4 +30,4 @@ RUN python -m pip install --no-cache-dir "pytest>=9.0.0" "pytest-cov>=7.0.0"
 
 ENV PYTHONPATH=/app/src
 
-CMD ["pytest", "--cov", "--cov-report=term-missing"]
+CMD ["pytest", "--cov", "--cov-report=term-missing", "--cov-report=xml"]
