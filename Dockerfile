@@ -1,4 +1,4 @@
-FROM python:3.14-slim AS builder
+FROM python:3.15-slim AS builder
 
 WORKDIR /build
 
@@ -12,7 +12,7 @@ COPY src ./src
 RUN python -m pip install --upgrade pip setuptools wheel && \
 	python -m pip install --no-cache-dir .
 
-FROM python:3.14-slim AS runtime
+FROM python:3.15-slim AS runtime
 
 WORKDIR /app
 
